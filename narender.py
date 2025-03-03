@@ -28,7 +28,6 @@ client = chromadb.PersistentClient(path="./chroma_db")
 collection_name = "dokumenty_kolekce"
 collection = client.get_or_create_collection(collection_name)
 
-
 # Model pro příchozí dotazy
 class QueryRequest(BaseModel):
     query: str
@@ -51,7 +50,7 @@ def load_documents_into_chromadb():
     # Vygeneruj embeddingy pro všechny dokumenty
     embeddings = []
     for doc in documents:
-        response = openai.Embedding.create(
+        response = openai.embeddings.create(  # Upravený způsob volání API
             input=doc,
             model="text-embedding-ada-002"
         )
@@ -72,7 +71,7 @@ def load_documents_into_chromadb():
 def query_chromadb(query, n_results=5):
     """ Hledání relevantních dokumentů v ChromaDB """
     # Generování embeddingu pro dotaz
-    response = openai.Embedding.create(
+    response = openai.embeddings.create(  # Upravený způsob volání API
         input=query,
         model="text-embedding-ada-002"
     )
