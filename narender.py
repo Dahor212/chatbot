@@ -17,7 +17,7 @@ app = FastAPI()
 # Povolení CORS pro všechny domény (pro testování)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Povolit přístup odkudkoli
+    allow_origins=["*"],  # Povolit přístup odkudkoli, změňte to na konkrétní domény pro produkci
     allow_credentials=True,
     allow_methods=["*"],  # Povolit všechny metody (GET, POST, OPTIONS, atd.)
     allow_headers=["*"],  # Povolit všechny hlavičky
@@ -143,4 +143,4 @@ if __name__ == "__main__":
 
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=10000)
