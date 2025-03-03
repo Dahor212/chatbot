@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+openai
+chromadb
+python-docx
+tiktoken
+numpy
