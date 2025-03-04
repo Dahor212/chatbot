@@ -10,10 +10,6 @@ import numpy as np
 
 # Nastavení OpenAI API klíče z prostředí
 openai.api_key = os.getenv("OPENAI_API_KEY")  # Získejte klíč z prostředí
-if not openai.api_key:
-    print("Chyba: API klíč není nastaven.")
-else:
-    print("API klíč je nastaven.")  # Informace o nastavení klíče
 
 # Inicializace FastAPI
 app = FastAPI()
@@ -31,7 +27,6 @@ app.add_middleware(
 client = chromadb.PersistentClient(path="./chroma_db")
 collection_name = "dokumenty_kolekce"
 collection = client.get_or_create_collection(collection_name)
-print(f"ChromaDB kolekce '{collection_name}' byla vytvořena nebo nalezena.")
 
 # Model pro příchozí dotazy
 class QueryRequest(BaseModel):
@@ -40,7 +35,7 @@ class QueryRequest(BaseModel):
 
 def load_documents_into_chromadb():
     """ Funkce pro načtení dokumentů do ChromaDB """
-    print("Začínám načítat dokumenty do ChromaDB...")
+    # Předpokládejme, že dokumenty jsou v repozitáři ve složce "word"
     repo_path = "./word"  # Složka, která bude obsahovat dokumenty
     documents = []
 
@@ -52,20 +47,14 @@ def load_documents_into_chromadb():
             text = "\n".join([para.text for para in doc.paragraphs])
             documents.append(text)
 
-    print(f"Nalezeno {len(documents)} dokumentů.")
-
     # Vygeneruj embeddingy pro všechny dokumenty
     embeddings = []
     for doc in documents:
-        try:
-            response = openai.embeddings.create(  # Volání API pro embeddingy
-                input=doc,
-                model="text-embedding-ada-002"
-            )
-            embeddings.append(response["data"][0]["embedding"])
-            print(f"Embedding pro dokument {documents.index(doc)+1} vygenerován.")
-        except Exception as e:
-            print(f"Chyba při generování embeddingu pro dokument: {e}")
+        response = openai.embeddings.create(  # Upravený způsob volání API
+            input=doc,
+            model="text-embedding-ada-002"
+        )
+        embeddings.append(response.data[0].embedding)  # Opravený přístup k embeddingu
 
     # Vytvoření ID pro každý dokument
     document_ids = [f"doc_{i}" for i in range(len(documents))]
@@ -89,7 +78,8 @@ def query_chromadb(query, n_results=5):
             input=query,
             model="text-embedding-ada-002"
         )
-        query_embedding = response["data"][0]["embedding"]
+        # Oprava přístupu k embeddingu (zkontrolujeme strukturu odpovědi)
+        query_embedding = response.data[0].embedding
         print(f"Query embedding: {query_embedding[:10]}...")  # Debug: zobraz první část embeddingu
     except Exception as e:
         print(f"Chyba při generování embeddingu pro dotaz: {e}")
@@ -109,7 +99,6 @@ def query_chromadb(query, n_results=5):
 
 def generate_answer_with_chatgpt(query, context_documents):
     """ Generování odpovědi pomocí ChatGPT """
-    print(f"Generuji odpověď na základě {len(context_documents)} dokumentů.")
     if not context_documents or not isinstance(context_documents, list):
         return "Bohužel, odpověď ve své databázi nemám."
 
@@ -129,26 +118,22 @@ def generate_answer_with_chatgpt(query, context_documents):
     Odpověď:
     """
 
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "Jsi asistent v oblasti penzijního spoření."},
-                      {"role": "user", "content": prompt}],
-            max_tokens=300,  # Zvýšení max_tokens pro delší odpovědi
-            temperature=0.7,
-            stop=["\n\n"]  # Přidání stop sekvence pro ukončení odpovědi
-        )
-        return response['choices'][0]['message']['content'].strip()
-    except Exception as e:
-        print(f"Chyba při generování odpovědi: {e}")
-        return "Bohužel, odpověď ve své databázi nemám."
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "system", "content": "Jsi asistent v oblasti penzijního spoření."},
+                  {"role": "user", "content": prompt}],
+        max_tokens=300,  # Zvýšení max_tokens pro delší odpovědi
+        temperature=0.7,
+        stop=["\n\n"]  # Přidání stop sekvence pro ukončení odpovědi
+    )
+
+    return response['choices'][0]['message']['content'].strip()
 
 
 @app.post("/api/ask")
 async def ask_question(request: QueryRequest):
     """ Endpoint pro zpracování dotazů """
     query = request.query
-    print(f"Dotaz přijat: {query}")
     documents = query_chromadb(query)
 
     if not documents:
@@ -164,5 +149,4 @@ if __name__ == "__main__":
 
     import uvicorn
 
-    print("Spouštím server na portu 10000...")
     uvicorn.run(app, host="0.0.0.0", port=10000)
