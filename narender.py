@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)  # Vytvoření loggeru pro tento soubor
 class QueryRequest(BaseModel):
     query: str
 
-
 def load_documents_into_chromadb():
     """ Funkce pro načtení dokumentů do ChromaDB """
     # Předpokládejme, že dokumenty jsou v repozitáři ve složce "word"
@@ -59,11 +58,11 @@ def load_documents_into_chromadb():
     embeddings = []
     for doc in documents:
         try:
-            response = openai.embeddings.create(  # Upravený způsob volání API
+            response = openai.Embedding.create(  # Upravený způsob volání API
                 input=doc,
                 model="text-embedding-ada-002"
             )
-            embeddings.append(response['data'][0]['embedding'])  # Oprava přístupu k datům
+            embeddings.append(response.data[0].embedding)  # Oprava přístupu k datům
             logger.debug("Embedding pro dokument úspěšně vygenerován.")
         except Exception as e:
             logger.error("Chyba při generování embeddingu pro dokument: %s", str(e))
@@ -83,19 +82,17 @@ def load_documents_into_chromadb():
     except Exception as e:
         logger.error("Chyba při ukládání dokumentů do ChromaDB: %s", str(e))
 
-
 def query_chromadb(query, n_results=5):
     """ Hledání relevantních dokumentů v ChromaDB """
     logger.info("Začínám hledat dokumenty pro dotaz: '%s'...", query)
 
     # Generování embeddingu pro dotaz
     try:
-        response = openai.embeddings.create(  
-    input=query,
-    model="text-embedding-ada-002"
-)
-query_embedding = response.data[0].embedding  # Správný způsob přístupu k datům
-
+        response = openai.Embedding.create(  
+            input=query,
+            model="text-embedding-ada-002"
+        )
+        query_embedding = response.data[0].embedding  # Správný způsob přístupu k datům
         logger.debug(f"Query embedding: {query_embedding[:10]}...")  # Debug: zobraz první část embeddingu
     except Exception as e:
         logger.error("Chyba při generování embeddingu pro dotaz: %s", str(e))
@@ -116,44 +113,6 @@ query_embedding = response.data[0].embedding  # Správný způsob přístupu k d
     
     return documents
 
-
-def generate_answer_with_chatgpt(query, context_documents):
-    """ Generování odpovědi pomocí ChatGPT """
-    if not context_documents or not isinstance(context_documents, list):
-        logger.warning("Žádné relevantní dokumenty nenalezeny pro dotaz: '%s'.", query)
-        return "Bohužel, odpověď ve své databázi nemám."
-
-    # Zajištění správného formátu context_documents
-    context_documents = [str(doc) if isinstance(doc, (list, dict)) else doc for doc in context_documents]
-
-    context = "\n\n".join(context_documents) if context_documents else "Žádná data."
-
-    prompt = f"""
-    Jsi asistent pro helpdesk v oblasti penzijního spoření. Odpovědaj pouze na základě následujících dokumentů.
-    Pokud odpověď neznáš, odpověz: 'Bohužel, odpověď ve své databázi nemám.'
-
-    Kontext dokumentů:
-    {context}
-
-    Otázka: {query}
-    Odpověď:
-    """
-
-    try:
-        # Použití nového API pro generování odpovědi
-        response = openai.Completion.create(
-            model="gpt-3.5-turbo",  # Použití modelu ChatGPT 3.5 Turbo
-            prompt=prompt,
-            max_tokens=300,
-            temperature=0.7
-        )
-        logger.info("Generování odpovědi bylo úspěšné.")
-        return response['choices'][0]['text'].strip()
-    except Exception as e:
-        logger.error("Chyba při generování odpovědi s ChatGPT: %s", str(e))
-        return "Chyba při generování odpovědi."
-
-
 @app.post("/api/ask")
 async def ask_question(request: QueryRequest):
     """ Endpoint pro zpracování dotazů """
@@ -161,13 +120,10 @@ async def ask_question(request: QueryRequest):
     
     try:
         documents = query_chromadb(request.query)
-
         if not documents:
             logger.warning("Žádné dokumenty nebyly nalezeny pro dotaz: '%s'.", request.query)
             return {"answer": "Bohužel, odpověď ve své databázi nemám."}
-
-        answer = generate_answer_with_chatgpt(request.query, documents)
-        return {"answer": answer}
+        return {"answer": documents}
     
     except HTTPException as e:
         logger.error("Chyba během zpracování dotazu: %s", str(e.detail))
@@ -175,13 +131,3 @@ async def ask_question(request: QueryRequest):
     except Exception as e:
         logger.error("Neočekávaná chyba: %s", str(e))
         return {"answer": "Došlo k neočekávané chybě."}
-
-
-if __name__ == "__main__":
-    # Zavolej tuto funkci, když spustíš kód pro nahrání dokumentů
-    logger.info("Spouštím aplikaci a nahrávám dokumenty...")
-    load_documents_into_chromadb()
-
-    import uvicorn
-    logger.info("Spouštím server na portu 10000...")
-    uvicorn.run(app, host="0.0.0.0", port=10000)
