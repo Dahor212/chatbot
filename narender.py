@@ -53,11 +53,11 @@ def load_documents_into_chromadb():
     embeddings = []
     for doc in documents:
         try:
-            response = openai.Embedding.create(
+            response = openai.embeddings.create(
                 input=doc,
                 model="text-embedding-ada-002"
             )
-            embeddings.append(response["data"][0]["embedding"])
+            embeddings.append(response.data[0].embedding)
             logger.debug("Embedding pro dokument úspěšně vygenerován.")
         except Exception as e:
             logger.error("Chyba při generování embeddingu pro dokument: %s", str(e))
@@ -79,11 +79,11 @@ def query_chromadb(query, n_results=5):
     logger.info("Začínám hledat dokumenty pro dotaz: '%s'...", query)
     
     try:
-        response = openai.Embedding.create(
+        response = openai.embeddings.create(
             input=query,
             model="text-embedding-ada-002"
         )
-        query_embedding = response["data"][0]["embedding"]
+        query_embedding = response.data[0].embedding
         logger.debug(f"Query embedding: {query_embedding[:10]}...")
     except Exception as e:
         logger.error("Chyba při generování embeddingu pro dotaz: %s", str(e))
