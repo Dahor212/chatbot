@@ -4,7 +4,6 @@ import chromadb
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from docx import Document
 import logging
 
 # Nastavení OpenAI API klíče z prostředí
@@ -23,9 +22,8 @@ app.add_middleware(
 )
 
 # Připojení k ChromaDB
-client = chromadb.PersistentClient(path="./chroma_db")
-collection_name = "dokumenty_kolekce"
-collection = client.get_or_create_collection(collection_name)
+chroma_client = chromadb.PersistentClient(path="./chroma_db")
+collection = chroma_client.get_or_create_collection(name="documents")
 
 # Nastavení logování
 logging.basicConfig(level=logging.DEBUG)  # Nastavení logování na DEBUG
@@ -38,82 +36,39 @@ class QueryRequest(BaseModel):
 def generate_embedding(text):
     """ Funkce pro generování embeddingu """
     try:
-        response = openai.embeddings.create(
+        response = openai.Embedding.create(
             input=text,
             model="text-embedding-ada-002"
         )
-        return response.data[0].embedding
+        return response["data"][0]["embedding"]
     except Exception as e:
         logger.error("Chyba při generování embeddingu: %s", str(e))
         return None
 
-def load_documents_into_chromadb():
-    """ Funkce pro načtení dokumentů do ChromaDB """
-    repo_path = "./word"
-    documents = []
-    logger.info("Načítám dokumenty ze složky '%s'...", repo_path)
-
-    for doc_filename in os.listdir(repo_path):
-        if doc_filename.endswith(".docx"):
-            doc_path = os.path.join(repo_path, doc_filename)
-            logger.debug("Načítám dokument '%s'...", doc_path)
-            doc = Document(doc_path)
-            text = "\n".join([para.text for para in doc.paragraphs])
-            documents.append(text)
-
-    if not documents:
-        logger.warning("Žádné dokumenty nebyly nalezeny ve složce '%s'.", repo_path)
-
-    embeddings = [generate_embedding(doc) for doc in documents]
-    document_ids = [f"doc_{i}" for i in range(len(documents))]
-
-    try:
-        collection.add(
-            ids=document_ids,
-            documents=documents,
-            embeddings=embeddings
-        )
-        logger.info(f"{len(documents)} dokumentů bylo uloženo do ChromaDB.")
-    except Exception as e:
-        logger.error("Chyba při ukládání dokumentů do ChromaDB: %s", str(e))
-
-def query_chromadb(query, n_results=5):
-    """ Hledání relevantních dokumentů v ChromaDB """
-    logger.info("Začínám hledat dokumenty pro dotaz: '%s'...", query)
-    query_embedding = generate_embedding(query)
+@app.post("/query")
+def query_chromadb(request: QueryRequest):
+    logger.info(f"Přijatý dotaz: {request.query}")
     
+    # Vytvoření embeddingu pro dotaz
+    query_embedding = generate_embedding(request.query)
     if query_embedding is None:
         raise HTTPException(status_code=500, detail="Chyba při generování embeddingu pro dotaz.")
-
+    
+    # Dotaz na ChromaDB
     try:
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=n_results,
-            include=["documents"]
-        )
-        documents = results.get("documents", [])
-        logger.info(f"Nalezeno {len(documents)} dokumentů.")
+        results = collection.query(query_embeddings=[query_embedding], n_results=5, include=["documents"])
+        documents = results.get("documents", [[]])[0]  # Vrátí seznam dokumentů
+        logger.info(f"Výsledky dotazu z ChromaDB: {results}")
     except Exception as e:
         logger.error("Chyba při dotazu na ChromaDB: %s", str(e))
         raise HTTPException(status_code=500, detail="Chyba při vyhledávání v databázi.")
     
-    return documents
-
-@app.post("/api/ask")
-async def ask_question(request: QueryRequest):
-    """ Endpoint pro zpracování dotazů """
-    logger.info("Přijat dotaz: '%s'", request.query)
+    # Zpracování odpovědi
+    if documents:
+        odpoved = documents[0]  # Vezmeme první nalezený dokument
+        logger.info(f"Vrácená odpověď: {odpoved}")
+    else:
+        odpoved = "Bohužel nemám odpověď na tuto otázku."
+        logger.warning("Žádné relevantní dokumenty nebyly nalezeny.")
     
-    try:
-        documents = query_chromadb(request.query)
-        if not documents:
-            logger.warning("Žádné dokumenty nebyly nalezeny pro dotaz: '%s'.", request.query)
-            return {"answer": "Bohužel, odpověď ve své databázi nemám."}
-        return {"answer": documents}
-    
-    except HTTPException as e:
-        logger.error("Chyba během zpracování dotazu: %s", str(e.detail))
-        return {"answer": "Došlo k chybě při zpracování dotazu."}
-    except Exception as e:
-        logger.error("Neočekávaná chyba: %s", str(e))
-        return {"answer": "Došlo k neočekávané chybě."}
+    return {"answer": odpoved}
