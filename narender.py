@@ -5,8 +5,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from docx import Document
-import tiktoken
-import numpy as np
 import logging
 
 # Nastavení OpenAI API klíče z prostředí
