@@ -65,7 +65,7 @@ def load_documents_into_chromadb():
                 input=doc,
                 model="text-embedding-ada-002"
             )
-            embeddings.append(response["data"][0]["embedding"])
+            embeddings.append(response['data'][0]['embedding'])  # Oprava přístupu k datům
             logger.debug("Embedding pro dokument úspěšně vygenerován.")
         except Exception as e:
             logger.error("Chyba při generování embeddingu pro dokument: %s", str(e))
@@ -96,7 +96,7 @@ def query_chromadb(query, n_results=5):
             input=query,
             model="text-embedding-ada-002"
         )
-        query_embedding = response["data"][0]["embedding"]
+        query_embedding = response['data'][0]['embedding']  # Oprava přístupu k datům
         logger.debug(f"Query embedding: {query_embedding[:10]}...")  # Debug: zobraz první část embeddingu
     except Exception as e:
         logger.error("Chyba při generování embeddingu pro dotaz: %s", str(e))
@@ -130,7 +130,7 @@ def generate_answer_with_chatgpt(query, context_documents):
     context = "\n\n".join(context_documents) if context_documents else "Žádná data."
 
     prompt = f"""
-    Jsi asistent pro helpdesk v oblasti penzijního spoření. Odpovídej pouze na základě následujících dokumentů.
+    Jsi asistent pro helpdesk v oblasti penzijního spoření. Odpovědaj pouze na základě následujících dokumentů.
     Pokud odpověď neznáš, odpověz: 'Bohužel, odpověď ve své databázi nemám.'
 
     Kontext dokumentů:
