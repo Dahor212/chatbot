@@ -90,11 +90,12 @@ def query_chromadb(query, n_results=5):
 
     # Generování embeddingu pro dotaz
     try:
-        response = openai.embeddings.create(  # Upravený způsob volání API
-            input=query,
-            model="text-embedding-ada-002"
-        )
-        query_embedding = response['data'][0]['embedding']  # Oprava přístupu k datům
+        response = openai.embeddings.create(  
+    input=query,
+    model="text-embedding-ada-002"
+)
+query_embedding = response.data[0].embedding  # Správný způsob přístupu k datům
+
         logger.debug(f"Query embedding: {query_embedding[:10]}...")  # Debug: zobraz první část embeddingu
     except Exception as e:
         logger.error("Chyba při generování embeddingu pro dotaz: %s", str(e))
