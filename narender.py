@@ -6,66 +6,57 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import logging
 
-# Nastavení OpenAI API klíče z prostředí
-openai.api_key = os.getenv("OPENAI_API_KEY")  # Získejte klíč z prostředí
+# Nastavení OpenAI API klíče
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Inicializace FastAPI
 app = FastAPI()
 
-# Povolení CORS pro všechny domény (pro testování)
+# Povolení CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Povolit přístup odkudkoli, změňte to na konkrétní domény pro produkci
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Povolit všechny metody (GET, POST, OPTIONS, atd.)
-    allow_headers=["*"],  # Povolit všechny hlavičky
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Připojení k ChromaDB
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
-collection = chroma_client.get_or_create_collection(name="documents")
+collection = chroma_client.get_collection(name="documents")
 
 # Nastavení logování
-logging.basicConfig(level=logging.DEBUG)  # Nastavení logování na DEBUG
-logger = logging.getLogger("narender")  # Vytvoření loggeru pro tento soubor
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("narender")
 
-# Model pro příchozí dotazy
 class QueryRequest(BaseModel):
     query: str
 
-def generate_embedding(text):
-    """ Funkce pro generování embeddingu """
+def generate_embedding(text: str):
+    """ Vytvoří embedding pro daný text pomocí OpenAI API. """
     try:
-        response = openai.Embedding.create(
-            input=text,
+        response = openai.embeddings.create(
+            input=[text],
             model="text-embedding-ada-002"
         )
-        return response["data"][0]["embedding"]
+        return response.data[0].embedding
     except Exception as e:
-        logger.error("Chyba při generování embeddingu: %s", str(e))
+        logger.error(f"Chyba při generování embeddingu: {e}")
         return None
 
 @app.post("/query")
 def query_chromadb(request: QueryRequest):
     logger.info(f"Přijatý dotaz: {request.query}")
     
-    # Vytvoření embeddingu pro dotaz
     query_embedding = generate_embedding(request.query)
     if query_embedding is None:
-        raise HTTPException(status_code=500, detail="Chyba při generování embeddingu pro dotaz.")
+        raise HTTPException(status_code=500, detail="Chyba při generování embeddingu.")
     
-    # Dotaz na ChromaDB
-    try:
-        results = collection.query(query_embeddings=[query_embedding], n_results=5, include=["documents"])
-        documents = results.get("documents", [[]])[0]  # Vrátí seznam dokumentů
-        logger.info(f"Výsledky dotazu z ChromaDB: {results}")
-    except Exception as e:
-        logger.error("Chyba při dotazu na ChromaDB: %s", str(e))
-        raise HTTPException(status_code=500, detail="Chyba při vyhledávání v databázi.")
+    results = collection.query(query_embeddings=[query_embedding], n_results=5)
     
-    # Zpracování odpovědi
+    documents = results.get("documents", [[]])[0]
     if documents:
-        odpoved = documents[0]  # Vezmeme první nalezený dokument
+        odpoved = documents[0]
         logger.info(f"Vrácená odpověď: {odpoved}")
     else:
         odpoved = "Bohužel nemám odpověď na tuto otázku."
