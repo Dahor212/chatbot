@@ -14,8 +14,8 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Nastavení GitHub přístupového tokenu
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO_OWNER = "Dahor212"
-REPO_NAME = "chatbot"
+REPO_OWNER = "your_github_username"
+REPO_NAME = "your_repository_name"
 FILE_PATH = "embeddings/embeddings.json"  # Cesta k souboru na GitHubu
 
 # Inicializace FastAPI
