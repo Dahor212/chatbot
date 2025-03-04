@@ -29,20 +29,30 @@ collection = client.get_or_create_collection(collection_name)
 
 # Nastavení logování
 logging.basicConfig(level=logging.DEBUG)  # Nastavení logování na DEBUG
-logger = logging.getLogger(__name__)  # Vytvoření loggeru pro tento soubor
+logger = logging.getLogger("narender")  # Vytvoření loggeru pro tento soubor
 
 # Model pro příchozí dotazy
 class QueryRequest(BaseModel):
     query: str
 
+def generate_embedding(text):
+    """ Funkce pro generování embeddingu """
+    try:
+        response = openai.embeddings.create(
+            input=text,
+            model="text-embedding-ada-002"
+        )
+        return response.data[0].embedding
+    except Exception as e:
+        logger.error("Chyba při generování embeddingu: %s", str(e))
+        return None
+
 def load_documents_into_chromadb():
     """ Funkce pro načtení dokumentů do ChromaDB """
-    # Předpokládejme, že dokumenty jsou v repozitáři ve složce "word"
-    repo_path = "./word"  # Složka, která bude obsahovat dokumenty
+    repo_path = "./word"
     documents = []
     logger.info("Načítám dokumenty ze složky '%s'...", repo_path)
 
-    # Pro každý dokument načteme text
     for doc_filename in os.listdir(repo_path):
         if doc_filename.endswith(".docx"):
             doc_path = os.path.join(repo_path, doc_filename)
@@ -54,51 +64,27 @@ def load_documents_into_chromadb():
     if not documents:
         logger.warning("Žádné dokumenty nebyly nalezeny ve složce '%s'.", repo_path)
 
-    # Vygeneruj embeddingy pro všechny dokumenty
-    embeddings = []
-    for doc in documents:
-        try:
-            response = openai.Embedding.create(  # Upravený způsob volání API
-                input=doc,
-                model="text-embedding-ada-002"
-            )
-            embeddings.append(response.data[0].embedding)  # Oprava přístupu k datům
-            logger.debug("Embedding pro dokument úspěšně vygenerován.")
-        except Exception as e:
-            logger.error("Chyba při generování embeddingu pro dokument: %s", str(e))
-            embeddings.append([])  # Pokud dojde k chybě, přidáme prázdný embedding
-
-    # Vytvoření ID pro každý dokument
+    embeddings = [generate_embedding(doc) for doc in documents]
     document_ids = [f"doc_{i}" for i in range(len(documents))]
 
-    # Ulož dokumenty, jejich ID a embeddingy do ChromaDB
     try:
         collection.add(
-            ids=document_ids,  # Zde se přidávají ID dokumentů
+            ids=document_ids,
             documents=documents,
             embeddings=embeddings
         )
-        logger.info(f"{len(documents)} dokumenty byly uloženy do ChromaDB.")
+        logger.info(f"{len(documents)} dokumentů bylo uloženo do ChromaDB.")
     except Exception as e:
         logger.error("Chyba při ukládání dokumentů do ChromaDB: %s", str(e))
 
 def query_chromadb(query, n_results=5):
     """ Hledání relevantních dokumentů v ChromaDB """
     logger.info("Začínám hledat dokumenty pro dotaz: '%s'...", query)
-
-    # Generování embeddingu pro dotaz
-    try:
-        response = openai.Embedding.create(  
-            input=query,
-            model="text-embedding-ada-002"
-        )
-        query_embedding = response.data[0].embedding  # Správný způsob přístupu k datům
-        logger.debug(f"Query embedding: {query_embedding[:10]}...")  # Debug: zobraz první část embeddingu
-    except Exception as e:
-        logger.error("Chyba při generování embeddingu pro dotaz: %s", str(e))
+    query_embedding = generate_embedding(query)
+    
+    if query_embedding is None:
         raise HTTPException(status_code=500, detail="Chyba při generování embeddingu pro dotaz.")
 
-    # Vyhledání dokumentů v ChromaDB na základě embeddingu
     try:
         results = collection.query(
             query_embeddings=[query_embedding],
