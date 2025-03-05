@@ -44,9 +44,6 @@ class QueryRequest(BaseModel):
     query: str
 
 def generate_embedding(text):
-    """
-    Funkce pro vygenerování embeddingu pomocí OpenAI API (nová verze)
-    """
     try:
         response = openai.Embedding.create(
             input=text,
@@ -57,55 +54,61 @@ def generate_embedding(text):
         logger.error(f"Chyba při generování embeddingu: {e}")
         return None
 
+def load_embeddings_from_github():
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        content = response.json()
+        file_content = base64.b64decode(content["content"]).decode()
+        return json.loads(file_content)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Chyba při načítání embeddingů z GitHubu: {e}")
+        return None
+
+def save_embeddings_to_github(embeddings):
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    new_content = json.dumps(embeddings)
+    encoded_content = base64.b64encode(new_content.encode()).decode()
+    data = {
+        "message": "Aktualizace embeddingů",
+        "content": encoded_content,
+    }
+    try:
+        response = requests.put(url, headers=headers, json=data)
+        response.raise_for_status()
+        logger.info("Embeddingy byly úspěšně uloženy na GitHub.")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Chyba při ukládání embeddingů na GitHub: {e}")
+
 def load_documents_into_chromadb():
     repo_path = "./word"
     documents = []
-    logger.info("Načítám dokumenty ze složky '%s'...", repo_path)
-    
     for doc_filename in os.listdir(repo_path):
         if doc_filename.endswith(".docx"):
             doc_path = os.path.join(repo_path, doc_filename)
             doc = Document(doc_path)
             text = "\n".join([para.text for para in doc.paragraphs])
             documents.append(text)
-    
-    embeddings = []
-    for doc in documents:
-        embedding = generate_embedding(doc)
-        if embedding:
-            embeddings.append(embedding)
-        else:
-            embeddings.append([])
-    
+    embeddings = load_embeddings_from_github() or []
+    if not embeddings:
+        embeddings = [generate_embedding(doc) for doc in documents if generate_embedding(doc)]
+        save_embeddings_to_github(embeddings)
     document_ids = [f"doc_{i}" for i in range(len(documents))]
-    
-    try:
-        collection.add(
-            ids=document_ids,
-            documents=documents,
-            embeddings=embeddings
-        )
-        logger.info(f"{len(documents)} dokumenty byly uloženy do ChromaDB.")
-    except Exception as e:
-        logger.error("Chyba při ukládání dokumentů do ChromaDB: %s", str(e))
+    collection.add(ids=document_ids, documents=documents, embeddings=embeddings)
 
 def query_chromadb(query, n_results=5):
-    logger.info("Začínám hledat dokumenty pro dotaz: '%s'...", query)
     query_embedding = generate_embedding(query)
-    
     if not query_embedding:
         raise HTTPException(status_code=500, detail="Chyba při generování embeddingu pro dotaz.")
-    
-    try:
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=n_results,
-            include=["documents"]
-        )
-        return results.get("documents", [[]])[0]
-    except Exception as e:
-        logger.error("Chyba při dotazu na ChromaDB: %s", str(e))
-        raise HTTPException(status_code=500, detail="Chyba při vyhledávání v databázi.")
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=n_results,
+        include=["documents"]
+    )
+    return results.get("documents", [[]])[0]
 
 @app.post("/api/ask")
 async def ask_question(request: QueryRequest):
