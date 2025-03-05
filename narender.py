@@ -8,14 +8,15 @@ from docx import Document
 import logging
 import json
 import requests
+import base64  # Import pro base64 kódování
 
 # Nastavení OpenAI API klíče z prostředí
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Nastavení GitHub přístupového tokenu
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO_OWNER = "your_github_username"
-REPO_NAME = "your_repository_name"
+REPO_OWNER = "Dahor212"
+REPO_NAME = "chatbot"
 FILE_PATH = "embeddings/embeddings.json"  # Cesta k souboru na GitHubu
 
 # Inicializace FastAPI
@@ -53,8 +54,8 @@ def load_embeddings_from_github():
         content = response.json()
         
         # GitHub API vrací soubor jako base64, takže ho dekódujeme
-        file_content = json.loads(content["content"].encode().decode("base64"))
-        return file_content
+        file_content = base64.b64decode(content["content"]).decode()
+        return json.loads(file_content)
     except requests.exceptions.RequestException as e:
         logger.error(f"Chyba při načítání embeddingů z GitHubu: {e}")
         return None
@@ -70,7 +71,7 @@ def save_embeddings_to_github(embeddings):
     new_content = json.dumps(embeddings)
     
     # GitHub API vyžaduje base64 pro uložení souboru
-    encoded_content = new_content.encode("base64")
+    encoded_content = base64.b64encode(new_content.encode()).decode()
     
     data = {
         "message": "Aktualizace embeddingů",
